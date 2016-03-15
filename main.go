@@ -11,12 +11,12 @@ type Torrent struct {
   Magnet string `json:"magnet"`
 }
 
-
+const base_url string = "http://localhost:3000"
 
 func main() {
-  url := "http://localhost:3000/torrents"
+  url := base_url + "/torrents"
 
-  // for {
+  for {
     res, err := http.Get(url)
 
     if err != nil {
@@ -35,8 +35,8 @@ func main() {
       deleteFromServer(&magnets)
     }
 
-    time.Sleep(1 * time.Second)
-  // }
+    time.Sleep(5 * time.Second)
+  }
 }
 
 func createFile(magnets *map[string]bool) {
@@ -66,8 +66,16 @@ func deleteFromServer(magnets *map[string]bool) {
 }
 
 func sendDelete(magnet string) {
-  url := "http://localhost:3000?magnet=" + magnet
-  _, err := http.NewRequest("DELETE", url, nil)
+  url := base_url + "/torrents?magnet=" + magnet
+
+  req, err := http.NewRequest("DELETE", url, nil)
+  if err != nil {
+    panic(err)
+  }
+
+  client := &http.Client{}
+
+  _, err = client.Do(req)
   if err != nil {
     panic(err)
   }
