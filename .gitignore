@@ -1,3 +1,8 @@
 .DS_Store
-deluge_watch
+.env
+bin
+deluge-watch
 torrents.magnet
+config.json
+tmp
+node_modules
