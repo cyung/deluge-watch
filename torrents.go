@@ -24,22 +24,28 @@ func GetTorrents() {
 
   for {
     time.Sleep(5 * time.Second)
+    cleanFolder("./tmp/zip")
+    cleanFolder("./tmp/torrents")
 
+    // fmt.Println("saving zip file")
     zip_filename, err := saveZipfile(client, req)
     if err != nil {
       continue
     }
 
+    // fmt.Println("unzipping file")
     err = unzip(zip_filename)
     if err != nil {
       continue
     }
 
+    // fmt.Println("acknowledging torrents received")
     filenames, err := ackTorrents()
     if err != nil {
       continue
     }
 
+    // fmt.Println("moving to watch folder")
     err = moveToWatchFolder(filenames)
     if err != nil {
       continue
@@ -47,9 +53,34 @@ func GetTorrents() {
   }
 }
 
+func cleanFolder(dirname string) error {
+  d, err := os.Open(dirname)
+  if err != nil {
+    fmt.Printf("error opening %s for cleaning\n", dirname)
+  }
+  defer d.Close()
+
+  filenames, err := d.Readdirnames(-1)
+  if err != nil {
+    fmt.Println("error reading " + dirname)
+    return err
+  }
+
+  for _, filename := range filenames {
+    err = os.Remove(dirname + "/" + filename)
+    if err != nil {
+      fmt.Printf("error removing %s\n", filename)
+      return err
+    }
+  }
+
+  return nil
+}
+
 func saveZipfile(client *http.Client, req *http.Request) (string, error) {
   res, err := client.Do(req)
   if err != nil {
+    fmt.Println("server not online")
     return "", err
   }
 
@@ -59,7 +90,7 @@ func saveZipfile(client *http.Client, req *http.Request) (string, error) {
   }
 
   // save zip file locally
-  zip_filename := "./tmp/" + RandomFilename() + ".zip"
+  zip_filename := "./tmp/zip/" + RandomFilename() + ".zip"
   file, err := os.Create(zip_filename)
   if err != nil {
     fmt.Println("error creating zip file")
@@ -149,7 +180,6 @@ func deleteTorrent(filename string) error {
   client := &http.Client{}
 
   url := GetBaseUrl() + "/torrents?torrent=" + filename 
-  fmt.Printf("url = %s\n", url)
   req, err := http.NewRequest("DELETE", url, nil)
   if err != nil {
     return err

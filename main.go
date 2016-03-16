@@ -5,9 +5,6 @@ import (
 )
 
 func main() {
-  fmt.Println("Starting watch server")
-  // go GetMagnets()
-  go GetTorrents()
-
-  for { }
+  fmt.Println("Starting watch")
+  GetTorrents()
 }
