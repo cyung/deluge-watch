@@ -3,7 +3,6 @@ package main
 import (
   "time"
   "net/http"
-  // "encoding/json"
   "os"
   "fmt"
   "math/rand"
@@ -24,40 +23,38 @@ func GetTorrents() {
   req.Header.Add("Authorization", GetKey())
 
   for {
+    time.Sleep(5 * time.Second)
+
     zip_filename, err := saveZipfile(client, req)
     if err != nil {
-      panic(err)
+      continue
     }
 
     err = unzip(zip_filename)
     if err != nil {
-      panic(err)
+      continue
     }
 
-    fmt.Println("acknowledging torrents")
     filenames, err := ackTorrents()
     if err != nil {
-      panic(err)
+      continue
     }
 
-    fmt.Println("moving to watch folder")
     err = moveToWatchFolder(filenames)
     if err != nil {
-      panic(err)
+      continue
     }
-
-    time.Sleep(5 * time.Second)
   }
 }
 
 func saveZipfile(client *http.Client, req *http.Request) (string, error) {
   res, err := client.Do(req)
-
   if err != nil {
     return "", err
   }
 
   if res.StatusCode != 200 {
+    fmt.Println("No torrents on server")
     return "", errors.New("No torrents on server")
   }
 
@@ -202,25 +199,3 @@ func RandomFilename() string {
 
   return string(result)
 }
-
-// func deleteTorrents(magnets *map[string]bool) {
-//   for magnet, _ := range *magnets {
-//     go sendDelete(magnet)
-//   }
-// }
-
-// func sendDelete(magnet string) {
-//   url := base_url + "/magnets?magnet=" + magnet
-
-//   req, err := http.NewRequest("DELETE", url, nil)
-//   if err != nil {
-//     panic(err)
-//   }
-
-//   client := &http.Client{}
-
-//   _, err = client.Do(req)
-//   if err != nil {
-//     panic(err)
-//   }
-// }
