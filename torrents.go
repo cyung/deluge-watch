@@ -5,9 +5,12 @@ import (
   "net/http"
   // "encoding/json"
   "os"
-  // "fmt"
+  "fmt"
   "math/rand"
   "io"
+  "io/ioutil"
+  "archive/zip"
+  "errors"
 )
 
 func GetTorrents() {
@@ -21,36 +24,167 @@ func GetTorrents() {
   req.Header.Add("Authorization", GetKey())
 
   for {
-    res, err := client.Do(req)
-
-    // continue if no zip file received
-    if err != nil {
-      time.Sleep(5 * time.Second)
-      continue
-    }
-
-    if res.StatusCode != 200 {
-      time.Sleep(5 * time.Second)
-      continue
-    }
-
-    // save to zip file
-    zip_filename := RandomFilename() + ".zip"
-    file, err := os.Create("./tmp/" + zip_filename)
+    zip_filename, err := saveZipfile(client, req)
     if err != nil {
       panic(err)
     }
 
-    _, err = io.Copy(file, res.Body)
+    err = unzip(zip_filename)
     if err != nil {
       panic(err)
     }
 
-    res.Body.Close()
-    file.Close()
+    fmt.Println("acknowledging torrents")
+    filenames, err := ackTorrents()
+    if err != nil {
+      panic(err)
+    }
+
+    fmt.Println("moving to watch folder")
+    err = moveToWatchFolder(filenames)
+    if err != nil {
+      panic(err)
+    }
 
     time.Sleep(5 * time.Second)
   }
+}
+
+func saveZipfile(client *http.Client, req *http.Request) (string, error) {
+  res, err := client.Do(req)
+
+  if err != nil {
+    return "", err
+  }
+
+  if res.StatusCode != 200 {
+    return "", errors.New("No torrents on server")
+  }
+
+  // save zip file locally
+  zip_filename := "./tmp/" + RandomFilename() + ".zip"
+  file, err := os.Create(zip_filename)
+  if err != nil {
+    fmt.Println("error creating zip file")
+    return "", err
+  }
+  defer file.Close()
+
+  _, err = io.Copy(file, res.Body)
+  if err != nil {
+    return "", err
+  }
+  defer res.Body.Close()
+
+  return zip_filename, nil
+}
+
+func unzip(zip_filename string) error {
+  r, err := zip.OpenReader(zip_filename)
+  if err != nil {
+    fmt.Println("error opening zip file")
+    return err
+  }
+  defer r.Close()
+
+  for _, f := range r.File {
+    err := createTorrent(f)
+    if err != nil {
+      return err
+    }
+  }
+
+  return nil
+}
+
+
+// create torrent
+func createTorrent(f *zip.File) error {
+  // open file, save locally
+  current_file, err := f.Open()
+  if err != nil {
+    fmt.Println("error opening torrent file")
+    return err
+  }
+  defer current_file.Close()
+
+  torrent, err := os.Create("./tmp/torrents/" + f.Name)
+  if err != nil {
+    fmt.Println("error creating torrent file")
+    return err
+  }
+  defer torrent.Close()
+
+  _, err = io.Copy(torrent, current_file)
+  if err != nil {
+    return err
+  }
+
+  return nil
+}
+
+// acknowledge receival of torrents and delete from server
+func ackTorrents() (*[]string, error) {
+  files, err := ioutil.ReadDir("./tmp/torrents")
+  if err != nil {
+    fmt.Println("error reading ./tmp/torrents")
+    return nil, err
+  }
+  var filenames []string
+
+  for _, file := range files {
+    if file.Name() == ".DS_Store" {
+      continue
+    }
+
+    filenames = append(filenames, file.Name())
+    err := deleteTorrent(file.Name())
+    if err != nil {
+      fmt.Println("error deleting torrent")
+      return nil, err
+    }
+  }
+
+  return &filenames, nil
+}
+
+func deleteTorrent(filename string) error {
+  client := &http.Client{}
+
+  url := GetBaseUrl() + "/torrents?torrent=" + filename 
+  fmt.Printf("url = %s\n", url)
+  req, err := http.NewRequest("DELETE", url, nil)
+  if err != nil {
+    return err
+  }
+  req.Header.Add("Authorization", GetKey())
+
+  res, err := client.Do(req)
+  if err != nil {
+    fmt.Println("error processing request")
+    return err
+  }
+
+  if res.StatusCode != 200 {
+    fmt.Println("file not on server")
+    return errors.New("Could not find file to delete")
+  }
+
+  return nil
+}
+
+func moveToWatchFolder(filenames *[]string) error {
+  for _, filename := range *filenames {
+    src := "./tmp/torrents/" + filename
+    dest := "./torrents/" + filename
+    err := os.Rename(src, dest) 
+    if err != nil {
+      fmt.Println("Error moving file")
+      return err
+    }
+  }
+
+  return nil
 }
 
 func RandomFilename() string {
